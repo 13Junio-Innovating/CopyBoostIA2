@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "CopyBoostIA",
+    "slug": "CopyBoostIA",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": [
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Permitir que o CopyBoost IA use o microfone para ditar prompts.",
+          "speechRecognitionPermission": "Permitir que o CopyBoost IA reconheça sua fala para gerar prompts."
+        }
+      ],
+      "expo-font"
+    ],
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#060816"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "Precisamos do microfone para você ditar o prompt.",
+        "NSSpeechRecognitionUsageDescription": "Precisamos do reconhecimento de fala para converter sua voz em texto."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#060816"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}

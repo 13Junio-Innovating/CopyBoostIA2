@@ -16,6 +16,14 @@ type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 const DEMO_EMAIL = 'demo@copyboostia.app';
 const DEMO_PASSWORD = '123456';
 
+function shouldAutoLoginDemo(): boolean {
+  if (process.env.EXPO_PUBLIC_DISABLE_DEMO_AUTOLOGIN === '1') return false;
+  if (Platform.OS !== 'web') return true;
+  if (typeof window === 'undefined') return true;
+  const params = new URLSearchParams(window.location.search);
+  return params.get('autodemo') !== '0';
+}
+
 export default function LoginScreen({ navigation }: Props) {
   const { showToast } = useToast();
   const login = useAuthStore((s) => s.login);
@@ -30,6 +38,7 @@ export default function LoginScreen({ navigation }: Props) {
   });
 
   useEffect(() => {
+    if (!shouldAutoLoginDemo()) return;
     const run = async (): Promise<void> => {
       try {
         setLoading(true);

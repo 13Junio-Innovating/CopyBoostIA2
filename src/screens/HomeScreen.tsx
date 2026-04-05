@@ -1,8 +1,8 @@
 import type { CompositeScreenProps } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import Button from '../components/Button';
@@ -30,6 +30,8 @@ export default function HomeScreen({ navigation }: Props) {
   const createFromCopy = useHistoryStore((s) => s.createFromCopy);
   const billingStatus = useBillingStore((s) => s.status);
   const trialDaysLeft = useBillingStore((s) => s.getTrialDaysLeft());
+
+  const webRecognitionRef = useRef<WebSpeechRecognition | null>(null);
 
   const [prompt, setPrompt] = useState<string>('');
   const [kind, setKind] = useState<CopyKind>('sales');
@@ -95,6 +97,37 @@ export default function HomeScreen({ navigation }: Props) {
                   onPress={async () => {
                     if (loading) return;
                     try {
+                      if (Platform.OS === 'web') {
+                        const rec = webRecognitionRef.current ?? createWebRecognition({
+                          onStart: () => setListening(true),
+                          onEnd: () => setListening(false),
+                          onError: (message) => {
+                            setListening(false);
+                            showToast({ type: 'error', title: 'Microfone', message });
+                          },
+                          onResult: (text) => {
+                            if (text.trim().length > 0) setPrompt(text.trim());
+                          },
+                        });
+
+                        if (!rec) {
+                          showToast({
+                            type: 'info',
+                            title: 'Microfone indisponível',
+                            message: 'Seu navegador não suporta ditado por voz.',
+                          });
+                          return;
+                        }
+
+                        webRecognitionRef.current = rec;
+                        if (listening) {
+                          rec.stop();
+                          return;
+                        }
+                        rec.start();
+                        return;
+                      }
+
                       const available = await ExpoSpeechRecognitionModule.isRecognitionAvailable();
                       if (!available) {
                         showToast({
@@ -181,11 +214,11 @@ export default function HomeScreen({ navigation }: Props) {
                   const res = await requestGenerateCopy({ prompt: prompt.trim(), kind });
                   const item = await createFromCopy({ kind, prompt: prompt.trim(), text: res.text });
                   navigation.navigate('Result', { itemId: item.id });
-                } catch {
+                } catch (err) {
                   showToast({
                     type: 'error',
                     title: 'Falha ao gerar',
-                    message: 'Verifique sua conexão e tente novamente.',
+                    message: err instanceof Error ? err.message : 'Verifique sua conexão e tente novamente.',
                   });
                 } finally {
                   setLoading(false);
@@ -246,3 +279,58 @@ const styles = StyleSheet.create({
   tipTitle: { color: palette.textDark, fontSize: 14, fontWeight: '800' },
   tipText: { color: palette.mutedDark, fontSize: 12, lineHeight: 18 },
 });
+
+type WebSpeechRecognitionResult = { transcript: string };
+
+type WebSpeechRecognitionEvent = {
+  results: ArrayLike<ArrayLike<WebSpeechRecognitionResult>>;
+};
+
+type WebSpeechRecognitionErrorEvent = {
+  error?: string;
+  message?: string;
+};
+
+type WebSpeechRecognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onend: (() => void) | null;
+  onerror: ((event: WebSpeechRecognitionErrorEvent) => void) | null;
+  onresult: ((event: WebSpeechRecognitionEvent) => void) | null;
+  start: () => void;
+  stop: () => void;
+};
+
+type WebSpeechRecognitionCtor = new () => WebSpeechRecognition;
+
+function createWebRecognition(handlers: {
+  onStart: () => void;
+  onEnd: () => void;
+  onError: (message: string) => void;
+  onResult: (text: string) => void;
+}): WebSpeechRecognition | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as {
+    SpeechRecognition?: WebSpeechRecognitionCtor;
+    webkitSpeechRecognition?: WebSpeechRecognitionCtor;
+  };
+  const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+  if (!Ctor) return null;
+
+  const rec = new Ctor();
+  rec.lang = 'pt-BR';
+  rec.continuous = false;
+  rec.interimResults = true;
+
+  rec.onstart = handlers.onStart;
+  rec.onend = handlers.onEnd;
+  rec.onerror = (event) => handlers.onError(event.message || event.error || 'Falha ao reconhecer a fala.');
+  rec.onresult = (event) => {
+    const first = event.results[0]?.[0]?.transcript;
+    if (typeof first === 'string') handlers.onResult(first);
+  };
+
+  return rec;
+}
